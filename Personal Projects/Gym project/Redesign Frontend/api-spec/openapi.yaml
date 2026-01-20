@@ -1,0 +1,1149 @@
+openapi: 3.0.3
+info:
+  title: PayZhe API
+  version: 1.0.0
+  description: |
+    API specification for PayZhe Frontend integration.
+    This is a partial specification covering all endpoints used by the frontend.
+    
+    **Authentication:**
+    - Most endpoints require `x-auth-token` header with JWT token
+    - Some endpoints require `gym-id` header for multi-tenant isolation
+    - Public endpoints: login, refresh-token, forgot-password, reset-password
+    
+    **Response Format:**
+    All endpoints return responses in the following format:
+    ```json
+    {
+      "status": "SUCCESS" | "FAIL",
+      "message": "string",
+      "data": <response_data>
+    }
+    ```
+
+servers:
+  - url: https://api.payzhe.fit/api/v1
+    description: Production server
+  - url: http://localhost:3000/api/v1
+    description: Development server
+
+tags:
+  - name: Authentication
+    description: Authentication and user management endpoints
+  - name: Dashboard
+    description: Dashboard statistics and overview
+  - name: Customers
+    description: Customer management (individual and group)
+  - name: Trainers
+    description: Trainer management
+  - name: Packages
+    description: Package management
+  - name: Equipment
+    description: Equipment management
+  - name: Finances
+    description: Payment and salary management
+  - name: Sessions
+    description: PT session management
+
+paths:
+  /admin/admin-management/login:
+    post:
+      tags:
+        - Authentication
+      summary: Sign in with email and password
+      description: Authenticates user and returns JWT tokens
+      operationId: signIn
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                rememberMe:
+                  type: boolean
+      responses:
+        '200':
+          description: Login response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [SUCCESS, FAIL]
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      idToken:
+                        type: string
+                      refreshToken:
+                        type: string
+                      user:
+                        type: object
+
+  /admin/admin-management/refresh-token:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Uses refresh token to get new access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refreshToken
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token refresh response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [SUCCESS, FAIL]
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      idToken:
+                        type: string
+                      refreshToken:
+                        type: string
+
+  /admin/admin-management/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset email
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Password reset email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /admin/admin-management/reset-password:
+    patch:
+      tags:
+        - Authentication
+      summary: Reset password with token
+      operationId: resetPassword
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+                - confirmPassword
+              properties:
+                password:
+                  type: string
+                confirmPassword:
+                  type: string
+                oldPassword:
+                  type: string
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /dashboard:
+    get:
+      tags:
+        - Dashboard
+      summary: Get dashboard statistics
+      description: Returns dashboard data including customer stats, trainer stats, and payment history
+      operationId: getDashboard
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /customers:
+    get:
+      tags:
+        - Customers
+      summary: Get customers list
+      description: Returns paginated list of customers
+      operationId: getCustomers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [individual, group]
+      responses:
+        '200':
+          description: Customers list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomersListResponse'
+    post:
+      tags:
+        - Customers
+      summary: Create customer
+      operationId: createCustomer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Customer'
+      responses:
+        '200':
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /customers/{id}:
+    put:
+      tags:
+        - Customers
+      summary: Update customer
+      operationId: updateCustomer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Customer'
+      responses:
+        '200':
+          description: Customer updated
+    delete:
+      tags:
+        - Customers
+      summary: Delete customer
+      operationId: deleteCustomer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Customer deleted
+
+  /customers/individual:
+    get:
+      tags:
+        - Customers
+      summary: Get individual customers
+      operationId: getIndividualCustomers
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Individual customers list
+
+  /customers/group:
+    get:
+      tags:
+        - Customers
+      summary: Get group customers
+      operationId: getGroupCustomers
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Group customers list
+
+  /admin/admin-management/getAllMembers:
+    get:
+      tags:
+        - Trainers
+      summary: Get trainers list
+      operationId: getTrainers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: size
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [part-time, full-time]
+      responses:
+        '200':
+          description: Trainers list
+
+  /admin/admin-management/{id}:
+    get:
+      tags:
+        - Trainers
+      summary: Get trainer by ID
+      operationId: getTrainerById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trainer data
+
+  /admin/admin-management/create:
+    post:
+      tags:
+        - Trainers
+      summary: Create trainer
+      operationId: createTrainer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Trainer'
+      responses:
+        '200':
+          description: Trainer created
+
+  /admin/admin-management/update/{id}:
+    put:
+      tags:
+        - Trainers
+      summary: Update trainer
+      operationId: updateTrainer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Trainer'
+      responses:
+        '200':
+          description: Trainer updated
+
+  /admin/admin-management/delete/{id}:
+    delete:
+      tags:
+        - Trainers
+      summary: Delete trainer
+      operationId: deleteTrainer
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Trainer deleted
+
+  /packages/get-all:
+    get:
+      tags:
+        - Packages
+      summary: Get all packages
+      description: Public endpoint that requires gym-id header
+      operationId: getPackages
+      parameters:
+        - name: gym-id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Packages list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /packages/{id}:
+    get:
+      tags:
+        - Packages
+      summary: Get package by ID
+      operationId: getPackageById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Package data
+
+  /packages:
+    post:
+      tags:
+        - Packages
+      summary: Create package
+      operationId: createPackage
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Package'
+      responses:
+        '200':
+          description: Package created
+
+  /packages/{id}:
+    patch:
+      tags:
+        - Packages
+      summary: Update package
+      operationId: updatePackage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Package'
+      responses:
+        '200':
+          description: Package updated
+    delete:
+      tags:
+        - Packages
+      summary: Delete package
+      operationId: deletePackage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Package deleted
+
+  /equipments:
+    get:
+      tags:
+        - Equipment
+      summary: Get equipment list
+      description: Requires gym-id header for GET/POST
+      operationId: getEquipment
+      parameters:
+        - name: gym-id
+          in: header
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: size
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Equipment list
+    post:
+      tags:
+        - Equipment
+      summary: Create equipment
+      operationId: createEquipment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: gym-id
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Equipment'
+      responses:
+        '200':
+          description: Equipment created
+
+  /equipments/{id}:
+    get:
+      tags:
+        - Equipment
+      summary: Get equipment by ID
+      operationId: getEquipmentById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Equipment data
+    patch:
+      tags:
+        - Equipment
+      summary: Update equipment
+      operationId: updateEquipment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Equipment'
+      responses:
+        '200':
+          description: Equipment updated
+    delete:
+      tags:
+        - Equipment
+      summary: Delete equipment
+      operationId: deleteEquipment
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Equipment deleted
+
+  /finances/client-payments:
+    get:
+      tags:
+        - Finances
+      summary: Get client payments
+      operationId: getClientPayments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: size
+          in: query
+          schema:
+            type: integer
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Payments list
+    post:
+      tags:
+        - Finances
+      summary: Create client payment
+      operationId: createClientPayment
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentDto'
+      responses:
+        '200':
+          description: Payment created
+
+  /finances/trainer-salaries:
+    get:
+      tags:
+        - Finances
+      summary: Get trainer salaries
+      operationId: getTrainerSalaries
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: size
+          in: query
+          schema:
+            type: integer
+        - name: month
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: trainerId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Salaries list
+
+  /finances/trainer-salaries/generate:
+    post:
+      tags:
+        - Finances
+      summary: Generate trainer salary
+      operationId: generateTrainerSalary
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateSalaryDto'
+      responses:
+        '200':
+          description: Salary generated
+
+  /sessions:
+    get:
+      tags:
+        - Sessions
+      summary: Get sessions list
+      operationId: getSessions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: size
+          in: query
+          schema:
+            type: integer
+        - name: trainerId
+          in: query
+          schema:
+            type: string
+        - name: clientId
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Sessions list
+
+  /sessions/{id}:
+    get:
+      tags:
+        - Sessions
+      summary: Get session by ID
+      operationId: getSessionById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session data
+    patch:
+      tags:
+        - Sessions
+      summary: Update session
+      operationId: updateSession
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Session'
+      responses:
+        '200':
+          description: Session updated
+    delete:
+      tags:
+        - Sessions
+      summary: Delete session
+      operationId: deleteSession
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session deleted
+
+  /sessions/create:
+    post:
+      tags:
+        - Sessions
+      summary: Create session
+      operationId: createSession
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionDto'
+      responses:
+        '200':
+          description: Session created
+
+  /sessions/extra:
+    post:
+      tags:
+        - Sessions
+      summary: Create extra session
+      operationId: createExtraSession
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExtraSessionDto'
+      responses:
+        '200':
+          description: Extra session created
+
+  /sessions/{id}/attendance:
+    patch:
+      tags:
+        - Sessions
+      summary: Mark session attendance
+      operationId: markAttendance
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - attendance
+              properties:
+                attendance:
+                  type: string
+                  enum: [attended, missed, cancelled]
+      responses:
+        '200':
+          description: Attendance marked
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token in x-auth-token header
+
+  schemas:
+    ApiResponse:
+      type: object
+      required:
+        - status
+        - message
+        - data
+      properties:
+        status:
+          type: string
+          enum: [SUCCESS, FAIL]
+        message:
+          type: string
+        data:
+          description: Response data (type varies by endpoint)
+
+    DashboardResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                client:
+                  type: object
+                  properties:
+                    individual:
+                      type: integer
+                    group:
+                      type: integer
+                    pendingPayments:
+                      type: integer
+                trainer:
+                  type: object
+                  properties:
+                    partTime:
+                      type: integer
+                    fullTime:
+                      type: integer
+                paymentHistory:
+                  type: array
+                  items:
+                    type: object
+
+    CustomersListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                customers:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Customer'
+                total:
+                  type: integer
+                page:
+                  type: integer
+                limit:
+                  type: integer
+
+    Customer:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+
+    Trainer:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        type:
+          type: string
+          enum: [part-time, full-time]
+
+    Package:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        price:
+          type: number
+        duration:
+          type: integer
+
+    Equipment:
+      type: object
+      properties:
+        _id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+
+    CreatePaymentDto:
+      type: object
+      required:
+        - clientId
+        - amount
+        - paymentDate
+        - paymentMethod
+        - clientType
+      properties:
+        clientId:
+          type: string
+        amount:
+          type: number
+        paymentDate:
+          type: string
+          format: date
+        paymentMethod:
+          type: string
+        clientType:
+          type: string
+        notes:
+          type: string
+
+    GenerateSalaryDto:
+      type: object
+      required:
+        - trainerId
+        - month
+        - year
+      properties:
+        trainerId:
+          type: string
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+        year:
+          type: integer
+        sessions:
+          type: integer
+
+    Session:
+      type: object
+      properties:
+        _id:
+          type: string
+        trainerId:
+          type: string
+        clientId:
+          type: string
+        date:
+          type: string
+          format: date-time
+        attendance:
+          type: string
+          enum: [attended, missed, cancelled]
+
+    CreateSessionDto:
+      type: object
+      required:
+        - trainerId
+        - clientId
+        - date
+      properties:
+        trainerId:
+          type: string
+        clientId:
+          type: string
+        date:
+          type: string
+          format: date-time
+
+    CreateExtraSessionDto:
+      type: object
+      required:
+        - trainerId
+        - clientId
+        - date
+      properties:
+        trainerId:
+          type: string
+        clientId:
+          type: string
+        date:
+          type: string
+          format: date-time
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - Invalid or missing token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            status: FAIL
+            message: Unauthorized
+            data: null
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+          example:
+            status: FAIL
+            message: Resource not found
+            data: null
+
+    RateLimitExceeded:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+
